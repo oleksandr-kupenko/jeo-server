@@ -1,0 +1,50 @@
+// Изменяем enum GameRole
+enum GameRole {
+  GAME_MASTER
+  CONTESTANT // вместо PLAYER
+}
+
+// Удаляем модель TeamMember, так как она больше не нужна
+
+// Заменяем Team на Player
+model Player {
+  id        String   @id @default(uuid())
+  name      String
+  points    Int      @default(0)
+  role      GameRole // добавляем поле роли
+  userId    String?  // прямая связь с User
+  user      User?    @relation(fields: [userId], references: [id])
+  gameId    String
+  game      Game     @relation(fields: [gameId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  // Добавляем связь с ответами на вопросы
+  answeredQuestions QuestionAnswer[]
+}
+
+model Game {
+  id          String   @id @default(uuid())
+  title       String
+  description String?
+  status      GameStatus @default(DRAFT)
+  // ... existing code ...
+  
+  // Переименовываем связь teams в players
+  players     Player[]
+  
+  // ... existing code ...
+}
+
+model QuestionAnswer {
+  id         String   @id @default(uuid())
+  playerId   String
+  player     Player   @relation(fields: [playerId], references: [id])
+  questionId String
+  question   Question @relation(fields: [questionId], references: [id])
+  isCorrect  Boolean
+  points     Int
+  createdAt  DateTime @default(now())
+}
+
+// ... existing code ... 

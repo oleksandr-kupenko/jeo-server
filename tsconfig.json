@@ -1,8 +1,8 @@
 {
   "compilerOptions": {
     "target": "es2022",
-    "module": "ESNext",
-    "moduleResolution": "Node",
+    "module": "NodeNext", // Изменено с ESNext
+    "moduleResolution": "NodeNext", // Изменено с Node
     "outDir": "./dist",
     "rootDir": "./src",
     "strict": true,
@@ -16,5 +16,8 @@
     }
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules"]
+  "exclude": ["node_modules"],
+  "ts-node": {
+    "esm": true
+  }
 }

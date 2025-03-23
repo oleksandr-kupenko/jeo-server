@@ -1,0 +1,865 @@
+openapi: 3.0.0
+info:
+  title: API игры "Своя игра"
+  description: API для управления игрой "Своя игра"
+  version: 1.0.0
+servers:
+  - url: http://localhost:3000/api
+    description: Локальный сервер для разработки
+paths:
+  /roles:
+    post:
+      summary: Создание новой роли
+      tags:
+        - Роли
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+              properties:
+                name:
+                  type: string
+                  example: "moderator"
+                description:
+                  type: string
+                  example: "Модератор с ограниченными правами"
+      responses:
+        '201':
+          description: Роль успешно создана
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Role'
+        '500':
+          description: Ошибка сервера
+    
+    get:
+      summary: Получение всех ролей
+      tags:
+        - Роли
+      responses:
+        '200':
+          description: Список ролей
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RoleWithPermissions'
+        '500':
+          description: Ошибка сервера
+  
+  /roles/permissions:
+    post:
+      summary: Назначение разрешения роли
+      tags:
+        - Роли
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - roleId
+                - permissionId
+              properties:
+                roleId:
+                  type: string
+                  format: uuid
+                permissionId:
+                  type: string
+                  format: uuid
+      responses:
+        '201':
+          description: Разрешение успешно назначено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RolePermission'
+        '500':
+          description: Ошибка сервера
+  
+  /permissions:
+    post:
+      summary: Создание нового разрешения
+      tags:
+        - Разрешения
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+              properties:
+                name:
+                  type: string
+                  example: "delete_game"
+                description:
+                  type: string
+                  example: "Может удалять игры"
+      responses:
+        '201':
+          description: Разрешение успешно создано
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Permission'
+        '500':
+          description: Ошибка сервера
+    
+    get:
+      summary: Получение всех разрешений
+      tags:
+        - Разрешения
+      responses:
+        '200':
+          description: Список разрешений
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Permission'
+        '500':
+          description: Ошибка сервера
+  
+  /users/roles:
+    post:
+      summary: Назначение роли пользователю
+      tags:
+        - Пользователи
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - userId
+                - roleId
+              properties:
+                userId:
+                  type: string
+                  format: uuid
+                roleId:
+                  type: string
+                  format: uuid
+      responses:
+        '201':
+          description: Роль успешно назначена пользователю
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserRole'
+        '500':
+          description: Ошибка сервера
+  
+  /users/{userId}/roles:
+    get:
+      summary: Получение ролей пользователя
+      tags:
+        - Пользователи
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Список ролей пользователя
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/UserRole'
+        '500':
+          description: Ошибка сервера
+  
+  /users/{userId}/profile:
+    put:
+      summary: Обновление/создание профиля пользователя
+      tags:
+        - Пользователи
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                bio:
+                  type: string
+                  example: "Информация о пользователе"
+                avatarUrl:
+                  type: string
+                  example: "https://example.com/avatar.jpg"
+      responses:
+        '200':
+          description: Профиль успешно обновлен
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfile'
+        '500':
+          description: Ошибка сервера
+
+  /players:
+    get:
+      summary: Получить всех игроков
+      tags:
+        - Игроки
+      responses:
+        '200':
+          description: Список игроков
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Player'
+    post:
+      summary: Создать нового игрока
+      tags:
+        - Игроки
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlayerInput'
+      responses:
+        '201':
+          description: Игрок создан
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Player'
+        '400':
+          description: Ошибка валидации
+        
+  /players/{id}:
+    get:
+      summary: Получить игрока по ID
+      tags:
+        - Игроки
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Данные игрока
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Player'
+        '404':
+          description: Игрок не найден
+    put:
+      summary: Обновить игрока
+      tags:
+        - Игроки
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlayerUpdateInput'
+      responses:
+        '200':
+          description: Игрок обновлен
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Player'
+        '404':
+          description: Игрок не найден
+    delete:
+      summary: Удалить игрока
+      tags:
+        - Игроки
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Игрок удален
+        '404':
+          description: Игрок не найден
+
+  /players/{id}/points:
+    patch:
+      summary: Обновить очки игрока
+      tags:
+        - Игроки
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - points
+              properties:
+                points:
+                  type: integer
+                  description: Количество очков для добавления
+      responses:
+        '200':
+          description: Очки игрока обновлены
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Player'
+        '400':
+          description: Ошибка валидации
+        '404':
+          description: Игрок не найден
+  
+  /players/game/{gameId}:
+    get:
+      summary: Получить игроков определенной игры
+      tags:
+        - Игроки
+      parameters:
+        - in: path
+          name: gameId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Список игроков игры
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Player'
+        '500':
+          description: Ошибка сервера
+  
+  /game-sessions:
+    post:
+      summary: Создание новой игровой сессии
+      tags:
+        - GameSessions
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - gameId
+              properties:
+                gameId:
+                  type: string
+                  format: uuid
+      responses:
+        '201':
+          description: Игровая сессия успешно создана
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GameSession'
+        '500':
+          description: Ошибка сервера
+    
+    get:
+      summary: Получение всех игровых сессий
+      tags:
+        - GameSessions
+      responses:
+        '200':
+          description: Список игровых сессий
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/GameSession'
+        '500':
+          description: Ошибка сервера
+  
+  /players/gameSession/{gameSessionId}:
+    get:
+      summary: Получить игроков определенной игровой сессии
+      tags:
+        - Игроки
+      parameters:
+        - in: path
+          name: gameSessionId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Список игроков сессии
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Player'
+        '500':
+          description: Ошибка сервера
+  
+  /questions/{id}/answer:
+    post:
+      summary: Ответить на вопрос
+      tags:
+        - Questions
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - playerId
+                - gameSessionId
+                - answer
+              properties:
+                gameSessionId:
+                  type: string
+                  format: uuid
+                  description: ID игровой сессии
+                playerId:
+                  type: string
+                  format: uuid
+                  description: ID игрока, отвечающего на вопрос
+                answer:
+                  type: string
+                  description: Ответ игрока
+      responses:
+        '200':
+          description: Результат ответа
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  isCorrect:
+                    type: boolean
+                    description: Верный ли ответ
+        '400':
+          description: Ошибка валидации
+        '404':
+          description: Вопрос не найден
+  
+  /game-sessions/{id}/questions/{questionId}/answer:
+    post:
+      summary: Ответить на вопрос в контексте игровой сессии
+      tags:
+        - GameSessions
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: ID игровой сессии
+        - in: path
+          name: questionId
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: ID вопроса
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - playerId
+                - isCorrect
+              properties:
+                playerId:
+                  type: string
+                  format: uuid
+                  description: ID игрока, отвечающего на вопрос
+                isCorrect:
+                  type: boolean
+                  description: Правильный ли ответ
+      responses:
+        '200':
+          description: Успешный ответ
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  pointsChange:
+                    type: integer
+                    description: Изменение очков игрока
+        '400':
+          description: Ошибка валидации
+        '404':
+          description: Вопрос или сессия не найдены
+
+components:
+  schemas:
+    Role:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+    
+    Permission:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+    
+    RolePermission:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        roleId:
+          type: string
+          format: uuid
+        permissionId:
+          type: string
+          format: uuid
+        role:
+          $ref: '#/components/schemas/Role'
+        permission:
+          $ref: '#/components/schemas/Permission'
+    
+    RoleWithPermissions:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        rolePermissions:
+          type: array
+          items:
+            $ref: '#/components/schemas/RolePermission'
+    
+    UserRole:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        roleId:
+          type: string
+          format: uuid
+        role:
+          $ref: '#/components/schemas/RoleWithPermissions'
+    
+    UserProfile:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        bio:
+          type: string
+          nullable: true
+        avatarUrl:
+          type: string
+          nullable: true
+        gamesPlayed:
+          type: integer
+          default: 0
+        gamesWon:
+          type: integer
+          default: 0
+          
+    GameRole:
+      type: string
+      enum: [GAME_MASTER, CONTESTANT]
+      
+    PlayerInput:
+      type: object
+      required:
+        - name
+        - gameSessionId
+        - userId
+      properties:
+        name:
+          type: string
+          description: Отображаемое имя игрока
+        gameSessionId:
+          type: string
+          format: uuid
+          description: ID игровой сессии
+        userId:
+          type: string
+          format: uuid
+          description: ID пользователя
+        role:
+          $ref: '#/components/schemas/GameRole'
+          description: Роль игрока в игре
+      
+    PlayerUpdateInput:
+      type: object
+      properties:
+        name:
+          type: string
+          description: Отображаемое имя игрока
+        points:
+          type: integer
+          description: Количество очков
+        role:
+          $ref: '#/components/schemas/GameRole'
+          description: Роль игрока в игре
+          
+    Player:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          description: Отображаемое имя игрока
+        points:
+          type: integer
+        role:
+          $ref: '#/components/schemas/GameRole'
+        userId:
+          type: string
+          format: uuid
+        gameSessionId:
+          type: string
+          format: uuid
+        user:
+          $ref: '#/components/schemas/User'
+        gameSession:
+          $ref: '#/components/schemas/GameSession'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        
+    QuestionAnswer:
+      type: object
+      properties:
+        id:
+          type: string
+        playerId:
+          type: string
+        questionId:
+          type: string
+        isCorrect:
+          type: boolean
+        points:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time 
+
+    Game:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        creatorId:
+          type: string
+          format: uuid
+        categories:
+          type: array
+          items:
+            $ref: '#/components/schemas/Category'
+        questionRows:
+          type: array
+          items:
+            $ref: '#/components/schemas/QuestionRow'
+            
+    GameSession:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        startedAt:
+          type: string
+          format: date-time
+        endedAt:
+          type: string
+          format: date-time
+          nullable: true
+        currentTurn:
+          type: string
+          format: uuid
+          nullable: true
+          description: ID игрока, чей сейчас ход
+        gameId:
+          type: string
+          format: uuid
+        game:
+          $ref: '#/components/schemas/Game'
+        players:
+          type: array
+          items:
+            $ref: '#/components/schemas/Player'
+        questions:
+          type: array
+          items:
+            $ref: '#/components/schemas/GameSessionQuestion'
+            
+    Question:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        question:
+          type: string
+        answer:
+          type: string
+        categoryId:
+          type: string
+          format: uuid
+        rowId:
+          type: string
+          format: uuid
+        category:
+          $ref: '#/components/schemas/Category'
+        questionRow:
+          $ref: '#/components/schemas/QuestionRow'
+        gameSessionQuestion:
+          type: array
+          items:
+            $ref: '#/components/schemas/GameSessionQuestion'
+
+    QuestionRow:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        value:
+          type: integer
+        order:
+          type: integer
+        gameId:
+          type: string
+          format: uuid
+        questions:
+          type: array
+          items:
+            $ref: '#/components/schemas/Question'
+    
+    GameSessionQuestion:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        isRevealed:
+          type: boolean
+          description: Был ли вопрос открыт
+        isAnswered:
+          type: boolean
+          description: Был ли дан ответ на вопрос
+        gameSessionId:
+          type: string
+          format: uuid
+        questionId:
+          type: string
+          format: uuid
+        question:
+          $ref: '#/components/schemas/Question'
+        answeredByPlayerId:
+          type: string
+          format: uuid
+          nullable: true
+          description: ID игрока, ответившего на вопрос
+        answeredBy:
+          $ref: '#/components/schemas/Player'
+          nullable: true 
