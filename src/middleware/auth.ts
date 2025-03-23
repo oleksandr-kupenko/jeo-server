@@ -1,73 +1,67 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
+import { PrismaClient, Role } from '@prisma/client';
 
-// Тип для роли пользователя
-type Role = string;
+const prisma = new PrismaClient();
 
-export interface AuthRequest extends Request {
-    user?: {
-        userId: string;
+// Расширяем интерфейс Request
+declare global {
+  namespace Express {
+    interface Request {
+      user?: {
+        id: string;
         role: Role;
-    };
+      }
+    }
+  }
 }
 
-export const authMiddleware = (req: AuthRequest, res: Response, next: NextFunction) => {
-    try {
-        const token = req.headers.authorization?.split(' ')[1];
-        if (!token) {
-            return res.status(401).json({ error: 'Токен не предоставлен' });
-        }
-
-        const decoded = jwt.verify(token, process.env.JWT_SECRET!) as {
-            id: string;
-            role: Role;
-        };
-
-        req.user = decoded;
-        next();
-    } catch (error) {
-        console.log(1);
-        res.status(401).json({ error: 'Неверный токен' });
+// Middleware для проверки аутентификации
+export const authenticate = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const token = req.headers.authorization?.split(' ')[1];
+    
+    if (!token) {
+      return res.status(401).json({ error: 'Требуется аутентификация' });
     }
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret') as { userId: string };
+    const user = await prisma.user.findUnique({
+      where: { id: decoded.userId },
+      select: { id: true, role: true }
+    });
+    if (!user) {
+      return res.status(401).json({ error: 'Пользователь не найден' });
+    }
+
+    req.user = user;
+    next();
+  } catch (error) {
+    return res.status(401).json({ error: 'Неверный токен' });
+  }
 };
 
-export const authenticate = (
-    req: AuthRequest, 
-    res: Response, 
-    next: NextFunction
-): void => {
-    try {
-        const authHeader = req.headers.authorization;
-        
-        console.log('Auth Header:', authHeader);
-        
-        if (!authHeader || !authHeader.startsWith('Bearer ')) {
-            console.log('Invalid header format or missing');
-            res.status(401).json({ message: 'Требуется авторизация' });
-            return;
-        }
-        
-        const token = authHeader.split(' ')[1];
-        console.log('Token received:', token.substring(0, 10) + '...');
-        
-        try {
-            const decoded = jwt.verify(token, process.env.JWT_SECRET || 'default_secret') as {
-                userId: string;
-                role: Role;
-            };
-            
-            console.log('Token verified successfully, user:', decoded);
-            req.user = decoded;
-            next();
-        } catch (jwtError) {
-            console.error('JWT verification error:', jwtError);
-            console.log(2);
-            res.status(401).json({ message: 'Неверный токен' });
-            return;
-        }
-    } catch (error) {
-        console.error('General error in authenticate middleware:', error);
-        res.status(401).json({ message: 'Ошибка аутентификации' });
-        return;
-    }
+// Алиас для обратной совместимости, если этот метод используется где-то еще
+export const authMiddleware = authenticate;
+
+// Middleware для проверки роли админа
+export const isAdmin = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    await authenticate(req, res, () => {
+      if (req.user?.role !== Role.ADMIN) {
+        return res.status(403).json({ error: 'Доступ запрещен' });
+      }
+      next();
+    });
+  } catch (error) {
+    return res.status(500).json({ error: 'Ошибка сервера' });
+  }
+};
+
+// Middleware для проверки авторизации доступа к профилю
+export const isAuthorizedForProfile = (req: Request, res: Response, next: NextFunction) => {
+  if (req.user?.id === req.params.userId || req.user?.role === 'ADMIN') {
+    next();
+  } else {
+    return res.status(403).json({ error: 'Нет прав для изменения этого профиля' });
+  }
 };

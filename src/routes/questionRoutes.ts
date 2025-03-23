@@ -1,6 +1,6 @@
 import express from 'express';
 import * as questionController from '../controllers/questionController';
-import { isAuthenticated } from '../middleware/authMiddleware';
+import { authenticate, isAdmin } from '../middleware/auth';
 
 const router = express.Router();
 
@@ -43,7 +43,7 @@ const router = express.Router();
  *       404:
  *         description: Игра не найдена
  */
-router.post('/rows', isAuthenticated, questionController.createQuestionRow);
+router.post('/rows', authenticate, questionController.createQuestionRow);
 
 /**
  * @swagger
@@ -114,7 +114,7 @@ router.get('/rows/game/:gameId', questionController.getQuestionRowsByGameId);
  *       404:
  *         description: Категория или ряд не найдены
  */
-router.post('/', isAuthenticated, questionController.createQuestion);
+router.post('/', authenticate, questionController.createQuestion);
 
 /**
  * @swagger
@@ -181,6 +181,6 @@ router.get('/game/:gameId', questionController.getQuestionsByGameId);
  *       404:
  *         description: Вопрос не найден
  */
-router.put('/:id', isAuthenticated, questionController.updateQuestion);
+router.put('/:id', authenticate, questionController.updateQuestion);
 
 export default router; 

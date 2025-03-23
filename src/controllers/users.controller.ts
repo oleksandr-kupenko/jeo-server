@@ -132,7 +132,7 @@ export class UsersController {
                     email,
                     name,
                     password: hashedPassword,
-                    role
+                    role: role || 'USER'
                 }
             });
 

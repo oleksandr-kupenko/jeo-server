@@ -1,6 +1,6 @@
 import express from 'express';
 import * as categoryController from '../controllers/categoryController';
-import { isAuthenticated } from '../middleware/authMiddleware';
+import { authenticate, isAdmin } from '../middleware/auth';
 
 const router = express.Router();
 
@@ -43,7 +43,7 @@ const router = express.Router();
  *       404:
  *         description: Игра не найдена
  */
-router.post('/', isAuthenticated, categoryController.createCategory);
+router.post('/', authenticate, categoryController.createCategory);
 
 /**
  * @swagger
@@ -110,7 +110,7 @@ router.get('/game/:gameId', categoryController.getCategoriesByGameId);
  *       404:
  *         description: Категория не найдена
  */
-router.put('/:id', isAuthenticated, categoryController.updateCategory);
+router.put('/:id', authenticate, categoryController.updateCategory);
 
 /**
  * @swagger
@@ -137,6 +137,6 @@ router.put('/:id', isAuthenticated, categoryController.updateCategory);
  *       404:
  *         description: Категория не найдена
  */
-router.delete('/:id', isAuthenticated, categoryController.deleteCategory);
+router.delete('/:id', authenticate, categoryController.deleteCategory);
 
 export default router; 

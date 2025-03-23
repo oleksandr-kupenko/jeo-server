@@ -1,6 +1,6 @@
 import express from 'express';
 import * as profileController from '../controllers/profileController';
-import { isAuthenticated, isAuthorizedForProfile } from '../middleware/authMiddleware';
+import { authenticate, isAuthorizedForProfile } from '../middleware/auth';
 
 const router = express.Router();
 
@@ -27,7 +27,7 @@ const router = express.Router();
  *       404:
  *         description: Профиль не найден
  */
-router.get('/:userId', profileController.getProfile);
+router.get('/:userId', authenticate, profileController.getProfile);
 
 /**
  * @swagger
@@ -67,7 +67,7 @@ router.get('/:userId', profileController.getProfile);
  *       403:
  *         description: Нет доступа
  */
-router.put('/:userId', isAuthenticated, isAuthorizedForProfile, profileController.updateProfile);
+router.put('/:userId', authenticate, profileController.updateProfile);
 
 /**
  * @swagger
@@ -111,6 +111,6 @@ router.put('/:userId', isAuthenticated, isAuthorizedForProfile, profileControlle
  *       404:
  *         description: Профиль не найден
  */
-router.put('/:userId/stats', isAuthenticated, isAuthorizedForProfile, profileController.updateStats);
+router.put('/:userId/stats', authenticate, profileController.updateStats);
 
 export default router; 

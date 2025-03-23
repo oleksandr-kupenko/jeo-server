@@ -1,6 +1,6 @@
 import express from 'express';
 import * as userController from '../controllers/userController';
-import { isAdmin, isAuthenticated } from '../middleware/authMiddleware';
+import { authenticate, isAdmin, isAuthorizedForProfile } from '../middleware/auth';
 
 const router = express.Router();
 
@@ -55,7 +55,7 @@ router.get('/', isAdmin, userController.getAllUsers);
  *       404:
  *         description: Пользователь не найден
  */
-router.get('/:id', isAuthenticated, userController.getUserById);
+router.get('/:id', authenticate, userController.getUserById);
 
 /**
  * @swagger

@@ -1,7 +1,7 @@
 import express from 'express';
 import * as gameController from '../controllers/gameController';
-import { isAuthenticated } from '../middleware/authMiddleware';
 import { authenticate } from '../middleware/auth';
+import { isAdmin } from '../middleware/auth';
 
 const router = express.Router();
 
@@ -34,7 +34,7 @@ const router = express.Router();
  *       401:
  *         description: Не авторизован
  */
-router.post('/', isAuthenticated, gameController.createGame);
+router.post('/', authenticate, gameController.createGame);
 
 /**
  * @swagger
@@ -122,7 +122,7 @@ router.get('/:id', gameController.getGameById);
  *       404:
  *         description: Игра не найдена
  */
-router.put('/:id', isAuthenticated, gameController.updateGame);
+router.put('/:id', authenticate, gameController.updateGame);
 
 /**
  * @swagger
@@ -149,6 +149,6 @@ router.put('/:id', isAuthenticated, gameController.updateGame);
  *       404:
  *         description: Игра не найдена
  */
-router.delete('/:id', isAuthenticated, gameController.deleteGame);
+router.delete('/:id', authenticate, gameController.deleteGame);
 
 export default router; 

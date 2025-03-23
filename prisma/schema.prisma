@@ -20,7 +20,7 @@ model User {
   role      Role     @default(USER)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  
+    
   // Связи
   createdGames Game[] @relation("GameCreator")
   players      Player[] // Изменено: связь с Player вместо TeamMember
