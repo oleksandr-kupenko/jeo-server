@@ -1,7 +1,8 @@
-import { Request, Response } from 'express';
+import { Request, Response, NextFunction } from 'express';
 import { PrismaClient } from '@prisma/client';
+import { prisma } from '../prisma';
 
-const prisma = new PrismaClient();
+const prismaClient = new PrismaClient();
 
 // Создание/обновление профиля пользователя
 export const updateProfile = async (req: Request, res: Response) => {
@@ -10,7 +11,7 @@ export const updateProfile = async (req: Request, res: Response) => {
     const { avatar, bio } = req.body;
     
     // Проверяем, существует ли профиль
-    const existingProfile = await prisma.userProfile.findUnique({
+    const existingProfile = await prismaClient.userProfile.findUnique({
       where: { userId }
     });
     
@@ -18,7 +19,7 @@ export const updateProfile = async (req: Request, res: Response) => {
     
     if (existingProfile) {
       // Обновляем существующий профиль
-      profile = await prisma.userProfile.update({
+      profile = await prismaClient.userProfile.update({
         where: { userId },
         data: {
           avatar,
@@ -27,7 +28,7 @@ export const updateProfile = async (req: Request, res: Response) => {
       });
     } else {
       // Создаем новый профиль
-      profile = await prisma.userProfile.create({
+      profile = await prismaClient.userProfile.create({
         data: {
           avatar,
           bio,
@@ -43,10 +44,10 @@ export const updateProfile = async (req: Request, res: Response) => {
 };
 
 // Получение профиля пользователя
-export const getProfile = async (req: Request, res: Response) => {
+export const getProfile = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { userId } = req.params;
-    
+
     const profile = await prisma.userProfile.findUnique({
       where: { userId },
       include: {
@@ -54,51 +55,49 @@ export const getProfile = async (req: Request, res: Response) => {
           select: {
             id: true,
             name: true,
-            email: true,
-            role: true,
-            createdAt: true
+            email: true
           }
         }
       }
     });
-    
+
     if (!profile) {
-      return res.status(404).json({ error: 'Профиль не найден' });
+      res.status(404).json({ message: 'Profile not found' });
+      return;
     }
-    
+
     res.json(profile);
   } catch (error) {
-    res.status(500).json({ error: 'Ошибка при получении профиля' });
+    next(error);
   }
 };
 
-// Обновление игровой статистики
-export const updateStats = async (req: Request, res: Response) => {
+// Обновление статистики пользователя
+export const updateStats = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { userId } = req.params;
     const { gamesPlayed, gamesWon, rating } = req.body;
-    
-    // Проверяем, существует ли профиль
-    const existingProfile = await prisma.userProfile.findUnique({
+
+    const profile = await prisma.userProfile.findUnique({
       where: { userId }
     });
-    
-    if (!existingProfile) {
-      return res.status(404).json({ error: 'Профиль не найден' });
+
+    if (!profile) {
+      res.status(404).json({ message: 'Profile not found' });
+      return;
     }
-    
-    // Обновляем статистику
+
     const updatedProfile = await prisma.userProfile.update({
       where: { userId },
       data: {
-        gamesPlayed: gamesPlayed !== undefined ? gamesPlayed : existingProfile.gamesPlayed,
-        gamesWon: gamesWon !== undefined ? gamesWon : existingProfile.gamesWon,
-        rating: rating !== undefined ? rating : existingProfile.rating
+        gamesPlayed,
+        gamesWon,
+        rating
       }
     });
-    
+
     res.json(updatedProfile);
   } catch (error) {
-    res.status(500).json({ error: 'Ошибка при обновлении статистики' });
+    next(error);
   }
 }; 

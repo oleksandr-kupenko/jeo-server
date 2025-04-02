@@ -1,8 +1,12 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
-import { PrismaClient, Role } from '@prisma/client';
+import { prisma } from '../prisma';
+import { SystemRole } from '@prisma/client';
 
-const prisma = new PrismaClient();
+interface JwtPayload {
+  userId: string;
+  role: SystemRole;
+}
 
 // Расширяем интерфейс Request
 declare global {
@@ -10,33 +14,53 @@ declare global {
     interface Request {
       user?: {
         id: string;
-        role: Role;
+        role: SystemRole;
       }
     }
   }
 }
 
 // Middleware для проверки аутентификации
-export const authenticate = async (req: Request, res: Response, next: NextFunction) => {
+export const authenticate = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const token = req.headers.authorization?.split(' ')[1];
-    
-    if (!token) {
-      return res.status(401).json({ error: 'Требуется аутентификация' });
-    }
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret') as { userId: string };
-    const user = await prisma.user.findUnique({
-      where: { id: decoded.userId },
-      select: { id: true, role: true }
-    });
-    if (!user) {
-      return res.status(401).json({ error: 'Пользователь не найден' });
+    const authHeader = req.headers.authorization;
+
+    if (!authHeader) {
+      res.status(401).json({ message: 'No token provided' });
+      return;
     }
 
-    req.user = user;
+    const token = authHeader.split(' ')[1];
+
+    if (!token) {
+      res.status(401).json({ message: 'Invalid token format' });
+      return;
+    }
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key') as JwtPayload;
+    const user = await prisma.user.findUnique({
+      
+      where: { id: decoded.userId }
+    });
+
+    if (!user) {
+      res.status(401).json({ message: 'User not found' });
+      return;
+    }
+
+    // Добавляем пользователя в объект запроса
+    req.user = {
+      id: user.id,
+      role: user.role
+    };
+
     next();
   } catch (error) {
-    return res.status(401).json({ error: 'Неверный токен' });
+    if (error instanceof jwt.JsonWebTokenError) {
+      res.status(401).json({ message: 'Invalid token' });
+    } else {
+      next(error);
+    }
   }
 };
 
@@ -44,24 +68,53 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
 export const authMiddleware = authenticate;
 
 // Middleware для проверки роли админа
-export const isAdmin = async (req: Request, res: Response, next: NextFunction) => {
+export const isAdmin = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    await authenticate(req, res, () => {
-      if (req.user?.role !== Role.ADMIN) {
-        return res.status(403).json({ error: 'Доступ запрещен' });
-      }
-      next();
+    if (!req.user) {
+      res.status(401).json({ message: 'Not authenticated' });
+      return;
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: req.user.id }
     });
+
+    if (!user) {
+      res.status(401).json({ message: 'User not found' });
+      return;
+    }
+
+    if (user.role !== SystemRole.ADMIN) {
+      res.status(403).json({ message: 'Access denied' });
+      return;
+    }
+
+    // Обновляем роль пользователя в объекте запроса
+    req.user = {
+      id: user.id,
+      role: user.role
+    };
+
+    next();
   } catch (error) {
-    return res.status(500).json({ error: 'Ошибка сервера' });
+    next(error);
   }
 };
 
 // Middleware для проверки авторизации доступа к профилю
-export const isAuthorizedForProfile = (req: Request, res: Response, next: NextFunction) => {
-  if (req.user?.id === req.params.userId || req.user?.role === 'ADMIN') {
-    next();
-  } else {
-    return res.status(403).json({ error: 'Нет прав для изменения этого профиля' });
+export const isOwnerOrAdmin = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({ message: 'Not authenticated' });
+      return;
+    }
+
+    if (req.user.id === req.params.userId || req.user.role === SystemRole.ADMIN) {
+      next();
+    } else {
+      res.status(403).json({ message: 'Access denied' });
+    }
+  } catch (error) {
+    next(error);
   }
 };

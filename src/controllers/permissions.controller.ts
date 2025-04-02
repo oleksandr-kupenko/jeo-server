@@ -1,33 +1,48 @@
-import { PrismaClient } from '@prisma/client';
-import { Request, Response } from 'express';
+import { Request, Response, NextFunction } from 'express';
+import { prisma } from '../prisma';
 
-const prisma = new PrismaClient();
+// Создание нового разрешения
+export const createPermission = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const { name, description } = req.body;
 
-export class PermissionsController {
-  // Создание разрешения
-  async createPermission(req: Request, res: Response) {
-    try {
-      const { name, description } = req.body;
-      
-      const permission = await prisma.$queryRaw`
-        INSERT INTO "Permission" (id, name, description)
-        VALUES (gen_random_uuid(), ${name}, ${description})
-        RETURNING *`;
-      
-      return res.status(201).json(permission[0]);
-    } catch (error) {
-      return res.status(500).json({ error: 'Не удалось создать разрешение' });
+    const existingPermission = await prisma.permission.findUnique({
+      where: { name }
+    });
+
+    if (existingPermission) {
+      res.status(400).json({ message: 'Permission already exists' });
+      return;
     }
+
+    const permission = await prisma.permission.create({
+      data: {
+        name,
+        description
+      }
+    });
+
+    res.status(201).json(permission);
+  } catch (error) {
+    next(error);
   }
-  
-  // Получение всех разрешений
-  async getPermissions(req: Request, res: Response) {
-    try {
-      const permissions = await prisma.$queryRaw`SELECT * FROM "Permission"`;
-      
-      return res.status(200).json(permissions);
-    } catch (error) {
-      return res.status(500).json({ error: 'Не удалось получить разрешения' });
-    }
+};
+
+// Получение всех разрешений
+export const getPermissions = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const permissions = await prisma.permission.findMany({
+      include: {
+        roles: {
+          include: {
+            role: true
+          }
+        }
+      }
+    });
+
+    res.json(permissions);
+  } catch (error) {
+    next(error);
   }
-} 
+}; 

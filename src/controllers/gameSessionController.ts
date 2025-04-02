@@ -1,64 +1,74 @@
-import { Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import { Request, Response, NextFunction } from 'express';
+import { Player, Game, SystemRole } from '@prisma/client';
+import { prisma } from '../prisma';
 
 // Создать новую игровую сессию
-export const createGameSession = async (req: Request, res: Response) => {
+export const createGameSession = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { gameId } = req.body;
-    
-    // Проверяем существование игры
-    const game = await prisma.game.findUnique({
-      where: { id: gameId }
-    });
-    
-    if (!game) {
-      return res.status(404).json({ message: 'Game not found' });
-    }
-    
-    // Создаем сессию игры
-    const gameSession = await prisma.gameSession.create({
+    const session = await prisma.gameSession.create({
       data: {
         game: {
           connect: { id: gameId }
-        }
+        },
+        startedAt: new Date()
       },
-      include: {
-        game: true
-      }
-    });
-    
-    res.status(201).json(gameSession);
-  } catch (error) {
-    console.error('Error creating game session:', error);
-    res.status(500).json({ message: 'Failed to create game session' });
-  }
-};
-
-// Получить все игровые сессии
-export const getAllGameSessions = async (req: Request, res: Response) => {
-  try {
-    const gameSessions = await prisma.gameSession.findMany({
       include: {
         game: true,
         players: true
       }
     });
-    
+    res.status(201).json(session);
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Получить все игровые сессии
+export const getAllGameSessions = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const userId = req.user?.id;
+    const isAdmin = req.user?.role === SystemRole.ADMIN;
+
+    if (!userId) {
+      res.status(401).json({ message: 'Not authenticated' });
+      return;
+    }
+
+    const gameSessions = await prisma.gameSession.findMany({
+      where: isAdmin ? undefined : {
+        players: {
+          some: {
+            userId
+          }
+        }
+      },
+      include: {
+        game: true,
+        players: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                name: true
+              }
+            }
+          }
+        }
+      }
+    });
+
     res.json(gameSessions);
   } catch (error) {
-    console.error('Error getting game sessions:', error);
-    res.status(500).json({ message: 'Failed to get game sessions' });
+    next(error);
   }
 };
 
 // Получить игровую сессию по ID
-export const getGameSessionById = async (req: Request, res: Response) => {
+export const getGameSessionById = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { id } = req.params;
-    
-    const gameSession = await prisma.gameSession.findUnique({
+    const session = await prisma.gameSession.findUnique({
       where: { id },
       include: {
         game: {
@@ -74,29 +84,30 @@ export const getGameSessionById = async (req: Request, res: Response) => {
         players: true,
         questions: {
           include: {
-            question: true
+            question: true,
+            answeredBy: true
           }
         }
       }
     });
-    
-    if (!gameSession) {
-      return res.status(404).json({ message: 'Game session not found' });
+
+    if (!session) {
+      res.status(404).json({ message: 'Game session not found' });
+      return;
     }
-    
-    res.json(gameSession);
+
+    res.json(session);
   } catch (error) {
-    console.error('Error getting game session:', error);
-    res.status(500).json({ message: 'Failed to get game session' });
+    next(error);
   }
 };
 
 // Получение активной сессии игры
-export const getGameSession = async (req: Request, res: Response) => {
+export const getGameSession = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { gameId } = req.params;
 
-    const session = await prisma.gameSession.findUnique({
+    const session = await prisma.gameSession.findFirst({
       where: { gameId },
       include: {
         questions: {
@@ -113,20 +124,21 @@ export const getGameSession = async (req: Request, res: Response) => {
     });
 
     if (!session) {
-      return res.status(404).json({ error: 'Сессия игры не найдена' });
+      res.status(404).json({ error: 'Сессия игры не найдена' });
+      return;
     }
 
     res.json(session);
   } catch (error) {
-    res.status(500).json({ error: 'Ошибка при получении сессии игры' });
+    next(error);
   }
 };
 
 // Обновление статуса вопроса в сессии
-export const updateSessionQuestion = async (req: Request, res: Response) => {
+export const updateSessionQuestion = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { sessionId, questionId } = req.params;
-    const { isRevealed, isAnswered, teamMemberId } = req.body;
+    const { isRevealed, isAnswered, playerId } = req.body;
     const userId = req.user?.id;
 
     // Проверяем наличие сессии и доступ пользователя
@@ -135,33 +147,31 @@ export const updateSessionQuestion = async (req: Request, res: Response) => {
       include: {
         game: {
           select: {
-            creatorId: true,
-            teams: {
-              include: {
-                members: {
-                  where: {
-                    role: 'GAME_MASTER',
-                    userId
-                  }
-                }
-              }
-            }
+            creatorId: true
+          }
+        },
+        players: {
+          where: {
+            role: 'GAME_MASTER',
+            userId
           }
         }
       }
     });
 
     if (!session) {
-      return res.status(404).json({ error: 'Сессия игры не найдена' });
+      res.status(404).json({ error: 'Сессия игры не найдена' });
+      return;
     }
 
-    // Проверяем права: должен быть либо создатель игры, либо ведущий в команде
+    // Проверяем права: должен быть либо создатель игры, либо ведущий
     const isGameCreator = session.game.creatorId === userId;
-    const isGameMaster = session.game.teams.some(team => team.members.length > 0);
-    const isAdmin = req.user?.role === 'ADMIN';
+    const isGameMaster = session.players.length > 0;
+    const isAdmin = req.user?.role === SystemRole.ADMIN;
 
     if (!isGameCreator && !isGameMaster && !isAdmin) {
-      return res.status(403).json({ error: 'Нет доступа к управлению сессией' });
+      res.status(403).json({ error: 'Нет доступа к управлению сессией' });
+      return;
     }
 
     // Получаем вопрос сессии
@@ -173,7 +183,8 @@ export const updateSessionQuestion = async (req: Request, res: Response) => {
     });
 
     if (!sessionQuestion) {
-      return res.status(404).json({ error: 'Вопрос не найден в данной сессии' });
+      res.status(404).json({ error: 'Вопрос не найден в данной сессии' });
+      return;
     }
 
     // Обновляем статус вопроса
@@ -181,62 +192,56 @@ export const updateSessionQuestion = async (req: Request, res: Response) => {
       where: { id: sessionQuestion.id },
       data: {
         isRevealed,
-        isAnswered
+        isAnswered,
+        answeredByPlayerId: playerId
       }
     });
 
-    // Если указан отвечающий игрок, обновляем вопрос
-    if (isAnswered && teamMemberId) {
-      await prisma.question.update({
-        where: { id: questionId },
-        data: {
-          isAnswered: true,
-          answeredByUserId: teamMemberId
-        }
-      });
-    }
-
     res.json(updatedSessionQuestion);
   } catch (error) {
-    res.status(500).json({ error: 'Ошибка при обновлении статуса вопроса' });
+    next(error);
   }
 };
 
 // Обновить текущий ход в игровой сессии
-export const updateCurrentTurn = async (req: Request, res: Response) => {
+export const updateCurrentTurn = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { id } = req.params;
-    const { playerId } = req.body;
-    
-    // Проверяем существование игрока
-    const player = await prisma.player.findUnique({
-      where: { id: playerId }
-    });
-    
-    if (!player) {
-      return res.status(404).json({ message: 'Player not found' });
-    }
-    
-    const gameSession = await prisma.gameSession.update({
+    const { currentTurn } = req.body;
+    const userId = req.user?.id;
+
+    const session = await prisma.gameSession.findUnique({
       where: { id },
-      data: {
-        currentTurn: playerId
-      },
       include: {
-        players: true,
-        game: true
+        players: true
       }
     });
-    
-    res.json(gameSession);
+
+    if (!session) {
+      res.status(404).json({ message: 'Game session not found' });
+      return;
+    }
+
+    const isPlayer = session.players.some((player: Player) => player.userId === userId);
+
+    if (!isPlayer) {
+      res.status(403).json({ message: 'Not authorized to update game session' });
+      return;
+    }
+
+    const updatedSession = await prisma.gameSession.update({
+      where: { id },
+      data: { currentTurn }
+    });
+
+    res.json(updatedSession);
   } catch (error) {
-    console.error('Error updating current turn:', error);
-    res.status(500).json({ message: 'Failed to update current turn' });
+    next(error);
   }
 };
 
 // Завершить игровую сессию
-export const endGameSession = async (req: Request, res: Response) => {
+export const endGameSession = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { id } = req.params;
     
@@ -280,7 +285,29 @@ export const endGameSession = async (req: Request, res: Response) => {
     
     res.json(gameSession);
   } catch (error) {
-    console.error('Error ending game session:', error);
-    res.status(500).json({ message: 'Failed to end game session' });
+    next(error);
+  }
+};
+
+export const markQuestionAnswered = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const { questionId } = req.params;
+    const { playerId, isCorrect } = req.body;
+
+    const question = await prisma.gameSessionQuestion.update({
+      where: { id: questionId },
+      data: {
+        isAnswered: true,
+        answeredByPlayerId: playerId
+      },
+      include: {
+        question: true,
+        answeredBy: true
+      }
+    });
+
+    res.json(question);
+  } catch (error) {
+    next(error);
   }
 }; 

@@ -1,67 +1,124 @@
+import { Request, Response, NextFunction } from 'express';
 import { PrismaClient } from '@prisma/client';
-import { Request, Response } from 'express';
+import { prisma } from '../prisma';
 
-const prisma = new PrismaClient();
+// Создание новой роли
+export const createRole = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const { name, description } = req.body;
 
-export class RolesController {
-  // Создание роли
-  async createRole(req: Request, res: Response) {
-    try {
-      const { name, description } = req.body;
-      
-      const role = await prisma.role.create({
-        data: {
-          name,
-          description
+    const existingRole = await prisma.role.findUnique({
+      where: { name }
+    });
+
+    if (existingRole) {
+      res.status(400).json({ message: 'Role already exists' });
+      return;
+    }
+
+    const role = await prisma.role.create({
+      data: {
+        name,
+        description
+      }
+    });
+
+    res.status(201).json(role);
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Получение всех ролей с их разрешениями
+export const getRoles = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const roles = await prisma.role.findMany({
+      include: {
+        permissions: {
+          include: {
+            permission: true
+          }
         }
-      });
-      
-      return res.status(201).json(role);
-    } catch (error) {
-      return res.status(500).json({ error: 'Не удалось создать роль' });
-    }
+      }
+    });
+
+    res.json(roles);
+  } catch (error) {
+    next(error);
   }
-  
-  // Получение всех ролей
-  async getRoles(req: Request, res: Response) {
-    try {
-      const roles = await prisma.$queryRaw`
-        SELECT r.*, json_agg(
-          json_build_object(
-            'id', rp.id,
-            'permission', (SELECT json_build_object('id', p.id, 'name', p.name, 'description', p.description) FROM "Permission" p WHERE p.id = rp."permissionId")
-          )
-        ) as "rolePermissions"
-        FROM "Role" r
-        LEFT JOIN "RolePermission" rp ON r.id = rp."roleId"
-        GROUP BY r.id`;
-      
-      return res.status(200).json(roles);
-    } catch (error) {
-      return res.status(500).json({ error: 'Не удалось получить роли' });
+};
+
+// Назначение разрешения роли
+export const assignPermissionToRole = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const { roleId, permissionId } = req.body;
+
+    // Проверяем существование роли и разрешения
+    const role = await prisma.role.findUnique({
+      where: { id: roleId }
+    });
+
+    const permission = await prisma.permission.findUnique({
+      where: { id: permissionId }
+    });
+
+    if (!role || !permission) {
+      res.status(404).json({ message: 'Role or permission not found' });
+      return;
     }
-  }
-  
-  // Назначение разрешений роли
-  async assignPermissionToRole(req: Request, res: Response) {
-    try {
-      const { roleId, permissionId } = req.body;
-      
-      const rolePermission = await prisma.$queryRaw`
-        INSERT INTO "RolePermission" (id, "roleId", "permissionId")
-        VALUES (gen_random_uuid(), ${roleId}, ${permissionId})
-        RETURNING *`;
-      
-      const role = await prisma.$queryRaw`SELECT * FROM "Role" WHERE id = ${roleId}`;
-      const permission = await prisma.$queryRaw`SELECT * FROM "Permission" WHERE id = ${permissionId}`;
-      
-      return res.status(201).json({
-        ...rolePermission[0],
-        role: role[0],
-        permission: permission[0]
-      });
-    } catch (error) {
-      return res.status(500).json({ error: 'Не удалось назначить разрешение' });
+
+    // Проверяем, не назначено ли уже это разрешение роли
+    const existingAssignment = await prisma.rolePermission.findFirst({
+      where: {
+        roleId,
+        permissionId
+      }
+    });
+
+    if (existingAssignment) {
+      res.status(400).json({ message: 'Permission already assigned to role' });
+      return;
     }
+
+    // Создаем связь между ролью и разрешением
+    const rolePermission = await prisma.rolePermission.create({
+      data: {
+        roleId,
+        permissionId
+      }
+    });
+
+    res.status(201).json(rolePermission);
+  } catch (error) {
+    next(error);
   }
-} 
+};
+
+// Удаление разрешения из роли
+export const removePermissionFromRole = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const { roleId, permissionId } = req.params;
+
+    const rolePermission = await prisma.rolePermission.findFirst({
+      where: {
+        roleId,
+        permissionId
+      }
+    });
+
+    if (!rolePermission) {
+      res.status(404).json({ message: 'Role permission not found' });
+      return;
+    }
+
+    await prisma.rolePermission.delete({
+      where: {
+        id: rolePermission.id
+      }
+    });
+
+    res.status(200).json({ message: 'Permission removed from role' });
+  } catch (error) {
+    next(error);
+  }
+}; 

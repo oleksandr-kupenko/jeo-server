@@ -6,12 +6,12 @@ import rolesRoutes from './routes/roles.routes';
 import permissionsRoutes from './routes/permissions.routes';
 import usersRoutes from './routes/users.routes';
 import swaggerUi from 'swagger-ui-express';
-import profileRoutes from './routes/profileRoutes';
-import gameRoutes from './routes/gameRoutes';
-import categoryRoutes from './routes/categoryRoutes';
-import questionRoutes from './routes/questionRoutes';
-import playerRoutes from './routes/playerRoutes';
-import gameSessionRoutes from './routes/gameSessionRoutes';
+import profileRoutes from './routes/profile.routes';
+import gameRoutes from './routes/game.routes';
+import categoryRoutes from './routes/category.routes';
+import questionRoutes from './routes/question.routes';
+import playerRoutes from './routes/player.routes';
+import gameSessionRoutes from './routes/gameSession.routes';
 import specs from './config/swagger';
 import { authenticate } from './middleware/auth';
 

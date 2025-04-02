@@ -1,132 +1,259 @@
-import { Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
-const prisma = new PrismaClient();
+import { Request, Response, NextFunction } from 'express';
+import { SystemRole, GameRole } from '@prisma/client';
+import { prisma } from '../prisma';
 
-// Получить всех игроков
-export const getAllPlayers = async (req: Request, res: Response) => {
+// Создание нового игрока
+export const createPlayer = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const players = await prisma.player.findMany({
-      include: {
-        user: true,
-        gameSession: true,
-        answeredQuestions: true,
-      },
-    });
-    res.json(players);
-  } catch (error) {
-    res.status(500).json({ error: 'Ошибка получения игроков' });
-  }
-};
+    const { gameSessionId, name } = req.body;
+    const userId = req.user?.id;
 
-// Получить игрока по ID
-export const getPlayerById = async (req: Request, res: Response) => {
-  try {
-    const player = await prisma.player.findUnique({
-      where: { id: req.params.id },
-      include: {
-        user: true,
-        gameSession: true,
-        answeredQuestions: true,
-      },
-    });
-
-    if (!player) {
-      return res.status(404).json({ error: 'Игрок не найден' });
+    if (!userId) {
+      res.status(401).json({ message: 'Not authenticated' });
+      return;
     }
 
-    res.json(player);
-  } catch (error) {
-    res.status(500).json({ error: 'Ошибка получения игрока' });
-  }
-};
-
-// Создать нового игрока
-export const createPlayer = async (req: Request, res: Response) => {
-  try {
-    const { name, userId, gameSessionId, role } = req.body;
-    
-    // Проверяем существование gameSession
+    // Проверяем, существует ли сессия
     const gameSession = await prisma.gameSession.findUnique({
-      where: { id: gameSessionId }
+      where: { id: gameSessionId },
+      include: {
+        game: true,
+        players: true
+      }
     });
-    
+
     if (!gameSession) {
-      return res.status(404).json({ message: 'Game session not found' });
+      res.status(404).json({ message: 'Game session not found' });
+      return;
     }
-    
+
+    // Проверяем, не является ли пользователь уже игроком в этой сессии
+    const existingPlayer = gameSession.players.find(player => player.userId === userId);
+    if (existingPlayer) {
+      res.status(400).json({ message: 'User is already a player in this session' });
+      return;
+    }
+
     const player = await prisma.player.create({
       data: {
         name,
-        role: role || "CONTESTANT",
-        user: {
-          connect: { id: userId }
-        },
-        gameSession: {
-          connect: { id: gameSessionId }
-        }
+        userId,
+        gameSessionId,
+        role: GameRole.CONTESTANT
       },
       include: {
-        user: true,
-        gameSession: true
+        user: {
+          select: {
+            id: true,
+            name: true
+          }
+        }
       }
     });
-    
+
     res.status(201).json(player);
   } catch (error) {
-    console.error('Error creating player:', error);
-    res.status(500).json({ message: 'Failed to create player' });
+    next(error);
   }
 };
 
-// Обновить игрока
-export const updatePlayer = async (req: Request, res: Response) => {
+// Получение всех игроков сессии
+export const getPlayersBySessionId = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const { name, points, role } = req.body;
+    const { gameSessionId } = req.params;
 
-    const player = await prisma.player.update({
-      where: { id: req.params.id },
+    const players = await prisma.player.findMany({
+      where: { gameSessionId },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true
+          }
+        }
+      }
+    });
+
+    res.json(players);
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Обновление игрока
+export const updatePlayer = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { name, points } = req.body;
+    const userId = req.user?.id;
+    const isAdmin = req.user?.role === SystemRole.ADMIN;
+
+    if (!userId) {
+      res.status(401).json({ message: 'Not authenticated' });
+      return;
+    }
+
+    const player = await prisma.player.findUnique({
+      where: { id },
+      include: {
+        gameSession: {
+          include: {
+            game: true
+          }
+        }
+      }
+    });
+
+    if (!player) {
+      res.status(404).json({ message: 'Player not found' });
+      return;
+    }
+
+    // Проверяем права на обновление
+    const isGameCreator = player.gameSession.game.creatorId === userId;
+    const isOwner = player.userId === userId;
+
+    if (!isAdmin && !isGameCreator && !isOwner) {
+      res.status(403).json({ message: 'Not authorized to update this player' });
+      return;
+    }
+
+    const updatedPlayer = await prisma.player.update({
+      where: { id },
       data: {
         name,
-        points,
-        role,
+        points
       },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true
+          }
+        }
+      }
     });
+
+    res.json(updatedPlayer);
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Удаление игрока
+export const deletePlayer = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const userId = req.user?.id;
+    const isAdmin = req.user?.role === SystemRole.ADMIN;
+
+    if (!userId) {
+      res.status(401).json({ message: 'Not authenticated' });
+      return;
+    }
+
+    const player = await prisma.player.findUnique({
+      where: { id },
+      include: {
+        gameSession: {
+          include: {
+            game: true
+          }
+        }
+      }
+    });
+
+    if (!player) {
+      res.status(404).json({ message: 'Player not found' });
+      return;
+    }
+
+    // Проверяем права на удаление
+    const isGameCreator = player.gameSession.game.creatorId === userId;
+    const isOwner = player.userId === userId;
+
+    if (!isAdmin && !isGameCreator && !isOwner) {
+      res.status(403).json({ message: 'Not authorized to remove this player' });
+      return;
+    }
+
+    await prisma.player.delete({
+      where: { id }
+    });
+
+    res.status(204).send();
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Получение игрока по ID
+export const getPlayerById = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const { id } = req.params;
+
+    const player = await prisma.player.findUnique({
+      where: { id },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true
+          }
+        },
+        gameSession: {
+          select: {
+            id: true,
+            startedAt: true,
+            game: {
+              select: {
+                id: true,
+                title: true
+              }
+            }
+          }
+        }
+      }
+    });
+
+    if (!player) {
+      res.status(404).json({ message: 'Player not found' });
+      return;
+    }
 
     res.json(player);
   } catch (error) {
-    res.status(500).json({ error: 'Ошибка обновления игрока' });
+    next(error);
   }
 };
 
-// Удалить игрока
-export const deletePlayer = async (req: Request, res: Response) => {
+// Получение всех игроков
+export const getAllPlayers = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    await prisma.player.delete({
-      where: { id: req.params.id },
-    });
-
-    res.json({ message: 'Игрок удален' });
-  } catch (error) {
-    res.status(500).json({ error: 'Ошибка удаления игрока' });
-  }
-};
-
-export const getPlayersByGameSession = async (req: Request, res: Response) => {
-  try {
-    const { gameSessionId } = req.params;
-    
     const players = await prisma.player.findMany({
-      where: {
-        gameSessionId
-      },
       include: {
-        user: true
+        user: {
+          select: {
+            id: true,
+            name: true
+          }
+        },
+        gameSession: {
+          select: {
+            id: true,
+            game: {
+              select: {
+                id: true,
+                title: true
+              }
+            }
+          }
+        }
       }
     });
-    
+
     res.json(players);
   } catch (error) {
-    console.error('Error getting players by game session:', error);
-    res.status(500).json({ message: 'Failed to get players' });
+    next(error);
   }
 }; 

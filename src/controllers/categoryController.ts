@@ -1,142 +1,111 @@
-import { Request, Response } from 'express';
+import { Request, Response, NextFunction } from 'express';
 import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
 // Создание новой категории
-export const createCategory = async (req: Request, res: Response) => {
+export const createCategory = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const { gameId, name, order } = req.body;
-    const userId = req.user?.id;
-
-    // Проверяем, существует ли игра и является ли пользователь ее создателем
-    const game = await prisma.game.findUnique({
-      where: { id: gameId },
-      select: { creatorId: true }
-    });
-
-    if (!game) {
-      return res.status(404).json({ error: 'Игра не найдена' });
-    }
-
-    if (game.creatorId !== userId && req.user?.role !== 'ADMIN') {
-      return res.status(403).json({ error: 'Нет доступа к добавлению категорий' });
-    }
+    const { name, gameId, order } = req.body;
 
     const category = await prisma.category.create({
       data: {
         name,
         order,
-        gameId
+        game: {
+          connect: { id: gameId }
+        }
+      },
+      include: {
+        questions: true
       }
     });
 
     res.status(201).json(category);
   } catch (error) {
-    res.status(500).json({ error: 'Ошибка при создании категории' });
+    next(error);
   }
 };
 
 // Получение всех категорий игры
-export const getCategoriesByGameId = async (req: Request, res: Response) => {
+export const getCategories = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { gameId } = req.params;
 
     const categories = await prisma.category.findMany({
-      where: { gameId },
-      orderBy: { order: 'asc' },
+      where: {
+        gameId
+      },
       include: {
-        questions: {
-          include: {
-            questionRow: true
-          }
-        }
+        questions: true
+      },
+      orderBy: {
+        order: 'asc'
       }
     });
 
     res.json(categories);
   } catch (error) {
-    res.status(500).json({ error: 'Ошибка при получении категорий' });
+    next(error);
+  }
+};
+
+export const getCategoryById = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const { id } = req.params;
+
+    const category = await prisma.category.findUnique({
+      where: { id },
+      include: {
+        questions: true
+      }
+    });
+
+    if (!category) {
+      res.status(404).json({ message: 'Category not found' });
+      return;
+    }
+
+    res.json(category);
+  } catch (error) {
+    next(error);
   }
 };
 
 // Обновление категории
-export const updateCategory = async (req: Request, res: Response) => {
+export const updateCategory = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { id } = req.params;
     const { name, order } = req.body;
-    const userId = req.user?.id;
 
-    // Проверяем, существует ли категория и имеет ли пользователь доступ
-    const category = await prisma.category.findUnique({
-      where: { id },
-      include: {
-        game: {
-          select: { creatorId: true }
-        }
-      }
-    });
-
-    if (!category) {
-      return res.status(404).json({ error: 'Категория не найдена' });
-    }
-
-    if (category.game.creatorId !== userId && req.user?.role !== 'ADMIN') {
-      return res.status(403).json({ error: 'Нет доступа к редактированию категории' });
-    }
-
-    const updatedCategory = await prisma.category.update({
+    const category = await prisma.category.update({
       where: { id },
       data: {
         name,
         order
+      },
+      include: {
+        questions: true
       }
     });
 
-    res.json(updatedCategory);
+    res.json(category);
   } catch (error) {
-    res.status(500).json({ error: 'Ошибка при обновлении категории' });
+    next(error);
   }
 };
 
 // Удаление категории
-export const deleteCategory = async (req: Request, res: Response) => {
+export const deleteCategory = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { id } = req.params;
-    const userId = req.user?.id;
 
-    // Проверяем, существует ли категория и имеет ли пользователь доступ
-    const category = await prisma.category.findUnique({
-      where: { id },
-      include: {
-        game: {
-          select: { creatorId: true }
-        }
-      }
-    });
-
-    if (!category) {
-      return res.status(404).json({ error: 'Категория не найдена' });
-    }
-
-    if (category.game.creatorId !== userId && req.user?.role !== 'ADMIN') {
-      return res.status(403).json({ error: 'Нет доступа к удалению категории' });
-    }
-
-    // Удаляем связанные вопросы
-    await prisma.question.deleteMany({
-      where: {
-        categoryId: id
-      }
-    });
-
-    // Удаляем категорию
     await prisma.category.delete({
       where: { id }
     });
 
-    res.json({ message: 'Категория успешно удалена' });
+    res.status(204).send();
   } catch (error) {
-    res.status(500).json({ error: 'Ошибка при удалении категории' });
+    next(error);
   }
 }; 

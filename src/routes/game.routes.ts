@@ -53,7 +53,6 @@ router.post('/', authenticate, gameController.createGame);
  *                 $ref: '#/components/schemas/Game'
  */
 router.get('/', (req, res, next) => {
-  console.log('Game controller reached, user:', req.user);
   next();
 }, gameController.getAllGames);
 

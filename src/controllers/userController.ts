@@ -1,4 +1,4 @@
-import { Request, Response } from 'express';
+import { Request, Response, NextFunction } from 'express';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
@@ -59,55 +59,75 @@ export const userController = {
     }
 };
 
-// Получение всех пользователей
-export const getAllUsers = async (req: Request, res: Response) => {
-  try {
-    const users = await prisma.user.findMany({
-      include: {
-        profiles: true
-      }
-    });
-    
-    // Убираем пароли из ответа
-    const safeUsers = users.map(user => {
-      const { password, ...userWithoutPassword } = user;
-      return userWithoutPassword;
-    });
-    
-    res.json(safeUsers);
-  } catch (error) {
-    res.status(500).json({ error: 'Ошибка при получении пользователей' });
-  }
-};
-
-// Получение пользователя по ID
-export const getUserById = async (req: Request, res: Response) => {
+export const getUser = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { id } = req.params;
     
     const user = await prisma.user.findUnique({
       where: { id },
       include: {
-        profiles: true,
-        teams: {
-          include: {
-            team: true
-          }
-        },
-        createdGames: true
+        profile: true
       }
     });
     
     if (!user) {
-      return res.status(404).json({ error: 'Пользователь не найден' });
+      res.status(404).json({ message: 'User not found' });
+      return;
     }
     
-    // Убираем пароль из ответа
-    const { password, ...userWithoutPassword } = user;
-    
-    res.json(userWithoutPassword);
+    res.json(user);
   } catch (error) {
-    res.status(500).json({ error: 'Ошибка при получении пользователя' });
+    next(error);
+  }
+};
+
+export const getAllUsers = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const users = await prisma.user.findMany({
+      include: {
+        profile: true
+      }
+    });
+    
+    res.json(users);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const updateUser = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { name, email } = req.body;
+    
+    const user = await prisma.user.update({
+      where: { id },
+      data: {
+        name,
+        email
+      },
+      include: {
+        profile: true
+      }
+    });
+    
+    res.json(user);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const deleteUser = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const { id } = req.params;
+    
+    await prisma.user.delete({
+      where: { id }
+    });
+    
+    res.json({ message: 'User deleted successfully' });
+  } catch (error) {
+    next(error);
   }
 };
 
@@ -138,26 +158,5 @@ export const updateUserRole = async (req: Request, res: Response) => {
     res.json(updatedUser);
   } catch (error) {
     res.status(500).json({ error: 'Ошибка при обновлении роли пользователя' });
-  }
-};
-
-// Удаление пользователя
-export const deleteUser = async (req: Request, res: Response) => {
-  try {
-    const { id } = req.params;
-    
-    // Сначала удаляем профиль
-    await prisma.userProfile.deleteMany({
-      where: { userId: id }
-    });
-    
-    // Затем удаляем пользователя
-    await prisma.user.delete({
-      where: { id }
-    });
-    
-    res.json({ message: 'Пользователь успешно удален' });
-  } catch (error) {
-    res.status(500).json({ error: 'Ошибка при удалении пользователя' });
   }
 };

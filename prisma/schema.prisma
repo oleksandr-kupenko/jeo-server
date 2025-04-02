@@ -7,7 +7,7 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum Role {
+enum SystemRole {
   ADMIN
   USER // Обычный пользователь - может создавать игры и быть игроком
 }
@@ -17,7 +17,7 @@ model User {
   email     String   @unique
   name      String
   password  String
-  role      Role     @default(USER)
+  role      SystemRole     @default(USER)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
     
@@ -25,6 +25,7 @@ model User {
   createdGames Game[] @relation("GameCreator")
   players      Player[] // Изменено: связь с Player вместо TeamMember
   profile      UserProfile?
+  roles        UserRole[]
 }
 
 model UserProfile {
@@ -38,6 +39,57 @@ model UserProfile {
   // Связи
   user        User     @relation(fields: [userId], references: [id])
   userId      String   @unique // Один профиль на пользователя
+}
+
+model Role {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Связи
+  users       UserRole[]
+  permissions RolePermission[]
+}
+
+model Permission {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Связи
+  roles       RolePermission[]
+}
+
+model UserRole {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Связи
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String
+  role      Role     @relation(fields: [roleId], references: [id])
+  roleId    String
+
+  @@unique([userId, roleId])
+}
+
+model RolePermission {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Связи
+  role      Role     @relation(fields: [roleId], references: [id])
+  roleId    String
+  permission Permission @relation(fields: [permissionId], references: [id])
+  permissionId String
+
+  @@unique([roleId, permissionId])
 }
 
 enum GameRole {
@@ -60,18 +112,19 @@ model Game {
   gameSessions  GameSession[] // Связь с сессиями (может быть несколько сессий одной игры)
 }
 
-// Изменено: Team и TeamMember заменены на Player
 model Player {
   id          String   @id @default(uuid())
   name        String   // Отображаемое в игре имя (может отличаться от имени пользователя)
   points      Int      @default(0)
   role        GameRole @default(CONTESTANT)
+  status      String   @default("offline") // Для отслеживания состояния подключения
+  socketId    String?  // Для хранения ID текущего сокет-соединения
   
   // Связи
   gameSession GameSession @relation(fields: [gameSessionId], references: [id])
   gameSessionId String
-  user        User     @relation(fields: [userId], references: [id])
-  userId      String
+  user        User?     @relation(fields: [userId], references: [id])
+  userId      String?
   
   // Вопросы, на которые ответил этот игрок
   answeredQuestions GameSessionQuestion[]
@@ -82,6 +135,8 @@ model GameSession {
   startedAt     DateTime             @default(now())
   endedAt       DateTime?
   currentTurn   String?              // ID игрока, чей сейчас ход
+  numberOfPlayers Int                @default(3) @db.SmallInt // Максимальное количество игроков (до 10)
+  numberOfAiPlayers Int              @default(0) @db.SmallInt // Количество ИИ игроков (не более, чем numberOfPlayers)
   
   // Связи
   game          Game                 @relation(fields: [gameId], references: [id])
@@ -94,6 +149,8 @@ model GameSession {
 
 model GameSessionQuestion {
   id            String      @id @default(uuid())
+  name          String      // Добавленное обязательное поле
+  timer         Int         @default(5) @db.SmallInt // Таймер от 0 до 120 секунд
   isRevealed    Boolean     @default(false) // Был ли вопрос открыт
   isAnswered    Boolean     @default(false) // Был ли дан ответ
   

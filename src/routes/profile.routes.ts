@@ -1,6 +1,6 @@
 import express from 'express';
 import * as profileController from '../controllers/profileController';
-import { authenticate, isAuthorizedForProfile } from '../middleware/auth';
+import { authenticate, isOwnerOrAdmin } from '../middleware/auth';
 
 const router = express.Router();
 
@@ -27,7 +27,7 @@ const router = express.Router();
  *       404:
  *         description: Профиль не найден
  */
-router.get('/:userId', authenticate, profileController.getProfile);
+router.get('/:userId', authenticate, isOwnerOrAdmin, profileController.getProfile);
 
 /**
  * @swagger
@@ -111,6 +111,6 @@ router.put('/:userId', authenticate, profileController.updateProfile);
  *       404:
  *         description: Профиль не найден
  */
-router.put('/:userId/stats', authenticate, profileController.updateStats);
+router.put('/:userId/stats', authenticate, isOwnerOrAdmin, profileController.updateStats);
 
 export default router; 

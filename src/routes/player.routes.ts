@@ -4,10 +4,11 @@ import {
   getPlayerById,
   createPlayer,
   updatePlayer,
+  getPlayersBySessionId,
   deletePlayer,
-  getPlayersByGameSession
 } from '../controllers/playerController';
 import { authenticate } from '../middleware/auth';
+import { Request, Response } from 'express';
 
 const router = express.Router();
 
@@ -47,8 +48,10 @@ router.get('/:id', getPlayerById);
  * @swagger
  * /players:
  *   post:
- *     summary: Создать нового игрока
+ *     summary: Create a new player
  *     tags: [Players]
+ *     security:
+ *       - bearerAuth: []
  *     requestBody:
  *       required: true
  *       content:
@@ -56,58 +59,57 @@ router.get('/:id', getPlayerById);
  *           schema:
  *             type: object
  *             required:
- *               - name
  *               - gameSessionId
- *               - userId
+ *               - name
  *             properties:
- *               name:
- *                 type: string
  *               gameSessionId:
  *                 type: string
- *                 format: uuid
- *               userId:
+ *               name:
  *                 type: string
- *                 format: uuid
- *               role:
- *                 type: string
- *                 enum: [GAME_MASTER, CONTESTANT]
  *     responses:
  *       201:
- *         description: Игрок создан
+ *         description: Player created successfully
  *       400:
- *         description: Ошибка валидации
- *       500:
- *         description: Серверная ошибка
+ *         description: User is already a player in this session
+ *       401:
+ *         description: Not authenticated
+ *       404:
+ *         description: Game session not found
  */
-router.post('/', createPlayer);
+router.post('/', authenticate, createPlayer);
 
 /**
  * @swagger
- * /players/gameSession/{gameSessionId}:
+ * /players/session/{gameSessionId}:
  *   get:
- *     summary: Получить игроков для указанной игровой сессии
+ *     summary: Get all players in a game session
  *     tags: [Players]
+ *     security:
+ *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: gameSessionId
  *         required: true
  *         schema:
  *           type: string
- *           format: uuid
  *     responses:
  *       200:
- *         description: Список игроков
- *       500:
- *         description: Серверная ошибка
+ *         description: List of players in the session
+ *       401:
+ *         description: Not authenticated
+ *       404:
+ *         description: Game session not found
  */
-router.get('/gameSession/:gameSessionId', getPlayersByGameSession);
+router.get('/session/:gameSessionId', authenticate, getPlayersBySessionId);
 
 /**
  * @swagger
- * /api/players/{id}:
+ * /players/{id}:
  *   put:
- *     summary: Обновить игрока
+ *     summary: Update a player
  *     tags: [Players]
+ *     security:
+ *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -125,23 +127,26 @@ router.get('/gameSession/:gameSessionId', getPlayersByGameSession);
  *                 type: string
  *               points:
  *                 type: number
- *               role:
- *                 type: string
- *                 enum: [GAME_MASTER, CONTESTANT]
  *     responses:
  *       200:
- *         description: Игрок обновлен
+ *         description: Player updated successfully
+ *       401:
+ *         description: Not authenticated
+ *       403:
+ *         description: Not authorized to update this player
  *       404:
- *         description: Игрок не найден
+ *         description: Player not found
  */
-router.put('/:id', updatePlayer);
+router.put('/:id', authenticate, updatePlayer);
 
 /**
  * @swagger
- * /api/players/{id}:
+ * /players/{id}:
  *   delete:
- *     summary: Удалить игрока
+ *     summary: Remove a player
  *     tags: [Players]
+ *     security:
+ *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -149,11 +154,15 @@ router.put('/:id', updatePlayer);
  *         schema:
  *           type: string
  *     responses:
- *       200:
- *         description: Игрок удален
+ *       204:
+ *         description: Player removed successfully
+ *       401:
+ *         description: Not authenticated
+ *       403:
+ *         description: Not authorized to remove this player
  *       404:
- *         description: Игрок не найден
+ *         description: Player not found
  */
-router.delete('/:id', deletePlayer);
+router.delete('/:id', authenticate, deletePlayer);
 
 export default router; 

@@ -1,33 +1,88 @@
 import { Request, Response, NextFunction } from 'express';
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import { SystemRole } from '@prisma/client';
+import { prisma } from '../prisma';
+import { emptyGameTemplate } from '../data-templates/empty-game.template';
 
 // Создание новой игры
-export const createGame = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-  console.log('createGame');
+export const createGame = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
   try {
     const { title } = req.body;
     const userId = (req as any).user.id;
     
+    // Создаем игру с категориями и рядами вопросов
     const game = await prisma.game.create({
       data: {
         title,
         creator: {
           connect: { id: userId }
+        },
+        // Создаем категории
+        categories: {
+          create: emptyGameTemplate.categories
+        },
+        // Создаем ряды вопросов
+        questionRows: {
+          create: emptyGameTemplate.questionRows
+        }
+      },
+      include: {
+        creator: true,
+        categories: true,
+        questionRows: true
+      }
+    });
+
+    // Создаем пустые вопросы для каждой категории и ряда
+    const questions = [];
+    for (const category of game.categories) {
+      for (const row of game.questionRows) {
+        questions.push({
+          ...emptyGameTemplate.emptyQuestion,
+          categoryId: category.id,
+          rowId: row.id
+        });
+      }
+    }
+
+    // Создаем все вопросы одним запросом
+    await prisma.question.createMany({
+      data: questions
+    });
+
+    // Получаем полную игру со всеми связями
+    const fullGame = await prisma.game.findUnique({
+      where: { id: game.id },
+      include: {
+        creator: true,
+        categories: {
+          include: {
+            questions: true
+          }
+        },
+        questionRows: {
+          include: {
+            questions: true
+          }
         }
       }
     });
-    
-    res.status(201).json(game);
+
+    res.status(201).json(fullGame);
   } catch (error) {
-    console.error('Error creating game:', error);
     next(error);
   }
 };
 
 // Получение всех игр
-export const getAllGames = async (req: Request, res: Response, next: NextFunction) => {
+export const getAllGames = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
   try {
     const games = await prisma.game.findMany({
       include: {
@@ -42,13 +97,16 @@ export const getAllGames = async (req: Request, res: Response, next: NextFunctio
 
     res.json(games);
   } catch (error) {
-    res.status(500).json({ error: 'Ошибка при получении игр' });
     next(error);
   }
 };
 
 // Получение игры по ID
-export const getGameById = async (req: Request, res: Response, next: NextFunction) => {
+export const getGameById = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
   try {
     const { id } = req.params;
     
@@ -56,81 +114,102 @@ export const getGameById = async (req: Request, res: Response, next: NextFunctio
       where: { id },
       include: {
         creator: true,
-        categories: true,
-        questionRows: true,
+        categories: {
+          include: {
+            questions: true
+          }
+        },
+        questionRows: {
+          include: {
+            questions: true
+          }
+        }
       }
     });
     
     if (!game) {
-      return res.status(404).json({ message: 'Game not found' });
+      res.status(404).json({ message: 'Game not found' });
+      return;
     }
     
     res.json(game);
   } catch (error) {
-    console.error('Error getting game:', error);
-    res.status(500).json({ message: 'Failed to get game' });
     next(error);
   }
 };
 
 // Обновление игры
-export const updateGame = async (req: Request, res: Response, next: NextFunction) => {
+export const updateGame = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
   try {
     const { id } = req.params;
-    const { title, isActive } = req.body;
+    const { title } = req.body;
     const userId = req.user?.id;
 
-    // Проверяем, существует ли игра и является ли пользователь ее создателем
+    if (!userId) {
+      res.status(401).json({ message: 'Not authenticated' });
+      return;
+    }
+
     const game = await prisma.game.findUnique({
-      where: { id },
-      select: { creatorId: true }
+      where: { id }
     });
 
     if (!game) {
-      return res.status(404).json({ error: 'Игра не найдена' });
+      res.status(404).json({ message: 'Game not found' });
+      return;
     }
 
-    if (game.creatorId !== userId && req.user?.role !== 'ADMIN') {
-      return res.status(403).json({ error: 'Нет доступа к редактированию игры' });
+    // Проверяем, является ли пользователь создателем игры или админом
+    if (game.creatorId !== userId && req.user?.role !== SystemRole.ADMIN) {
+      res.status(403).json({ message: 'Not authorized to update this game' });
+      return;
     }
 
     const updatedGame = await prisma.game.update({
       where: { id },
-      data: {
-        title,
-        isActive
-      }
+      data: { title }
     });
 
     res.json(updatedGame);
   } catch (error) {
-    res.status(500).json({ error: 'Ошибка при обновлении игры' });
     next(error);
   }
 };
 
 // Удаление игры
-export const deleteGame = async (req: Request, res: Response, next: NextFunction) => {
+export const deleteGame = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
   try {
     const { id } = req.params;
     const userId = req.user?.id;
 
-    // Проверяем, существует ли игра и является ли пользователь ее создателем
+    if (!userId) {
+      res.status(401).json({ message: 'Not authenticated' });
+      return;
+    }
+
     const game = await prisma.game.findUnique({
-      where: { id },
-      select: { creatorId: true }
+      where: { id }
     });
 
     if (!game) {
-      return res.status(404).json({ error: 'Игра не найдена' });
+      res.status(404).json({ message: 'Game not found' });
+      return;
     }
 
-    if (game.creatorId !== userId && req.user?.role !== 'ADMIN') {
-      return res.status(403).json({ error: 'Нет доступа к удалению игры' });
+    // Проверяем, является ли пользователь создателем игры или админом
+    if (game.creatorId !== userId && req.user?.role !== SystemRole.ADMIN) {
+      res.status(403).json({ message: 'Not authorized to delete this game' });
+      return;
     }
 
-    // Удаляем связанные сущности
-    // 1. Удаляем сессию игры и связанные вопросы сессии
     await prisma.gameSessionQuestion.deleteMany({
       where: {
         gameSession: {
@@ -143,7 +222,6 @@ export const deleteGame = async (req: Request, res: Response, next: NextFunction
       where: { gameId: id }
     });
 
-    // 2. Удаляем вопросы
     await prisma.question.deleteMany({
       where: {
         category: {
@@ -152,7 +230,6 @@ export const deleteGame = async (req: Request, res: Response, next: NextFunction
       }
     });
 
-    // 3. Удаляем категории и ряды вопросов
     await prisma.category.deleteMany({
       where: { gameId: id }
     });
@@ -161,27 +238,20 @@ export const deleteGame = async (req: Request, res: Response, next: NextFunction
       where: { gameId: id }
     });
 
-    // 4. Удаляем участников команд и команды
-    await prisma.teamMember.deleteMany({
+    await prisma.player.deleteMany({
       where: {
-        team: {
+        gameSession: {
           gameId: id
         }
       }
     });
 
-    await prisma.team.deleteMany({
-      where: { gameId: id }
-    });
-
-    // 5. Наконец, удаляем саму игру
     await prisma.game.delete({
       where: { id }
     });
 
-    res.json({ message: 'Игра успешно удалена' });
+    res.status(204).send();
   } catch (error) {
-    res.status(500).json({ error: 'Ошибка при удалении игры' });
     next(error);
   }
 }; 

@@ -1,8 +1,8 @@
-import express from 'express';
-import * as categoryController from '../controllers/categoryController';
-import { authenticate, isAdmin } from '../middleware/auth';
+import { Router } from 'express';
+import { createCategory, getCategories, getCategoryById, updateCategory, deleteCategory } from '../controllers/categoryController';
+import { authenticate } from '../middleware/auth';
 
-const router = express.Router();
+const router = Router();
 
 /**
  * @swagger
@@ -43,7 +43,7 @@ const router = express.Router();
  *       404:
  *         description: Игра не найдена
  */
-router.post('/', authenticate, categoryController.createCategory);
+router.post('/', authenticate, createCategory);
 
 /**
  * @swagger
@@ -68,7 +68,7 @@ router.post('/', authenticate, categoryController.createCategory);
  *               items:
  *                 $ref: '#/components/schemas/Category'
  */
-router.get('/game/:gameId', categoryController.getCategoriesByGameId);
+router.get('/game/:gameId', getCategories);
 
 /**
  * @swagger
@@ -110,7 +110,7 @@ router.get('/game/:gameId', categoryController.getCategoriesByGameId);
  *       404:
  *         description: Категория не найдена
  */
-router.put('/:id', authenticate, categoryController.updateCategory);
+router.put('/:id', authenticate, updateCategory);
 
 /**
  * @swagger
@@ -137,6 +137,6 @@ router.put('/:id', authenticate, categoryController.updateCategory);
  *       404:
  *         description: Категория не найдена
  */
-router.delete('/:id', authenticate, categoryController.deleteCategory);
+router.delete('/:id', authenticate, deleteCategory);
 
 export default router; 
