@@ -7,60 +7,47 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum SystemRole {
-  ADMIN
-  USER // Обычный пользователь - может создавать игры и быть игроком
-}
-
 model User {
-  id        String   @id @default(uuid())
-  email     String   @unique
-  name      String
-  password  String
-  role      SystemRole     @default(USER)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-    
-  // Связи
-  createdGames Game[] @relation("GameCreator")
-  players      Player[] // Изменено: связь с Player вместо TeamMember
+  id           String       @id @default(uuid())
+  email        String       @unique
+  name         String
+  password     String
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  role         SystemRole   @default(USER)
+  createdGames Game[]       @relation("GameCreator")
+  players      Player[]
   profile      UserProfile?
   roles        UserRole[]
 }
 
 model UserProfile {
-  id          String   @id @default(uuid())
-  avatar      String?  // URL аватара
-  bio         String?  // Описание пользователя
-  rating      Int      @default(0) // Рейтинг пользователя
-  gamesPlayed Int      @default(0) // Количество сыгранных игр
-  gamesWon    Int      @default(0) // Количество выигранных игр
-  
-  // Связи
-  user        User     @relation(fields: [userId], references: [id])
-  userId      String   @unique // Один профиль на пользователя
+  id          String  @id @default(uuid())
+  avatar      String?
+  bio         String?
+  rating      Int     @default(0)
+  gamesPlayed Int     @default(0)
+  gamesWon    Int     @default(0)
+  userId      String  @unique
+  user        User    @relation(fields: [userId], references: [id])
 }
 
 model Role {
-  id          String   @id @default(uuid())
-  name        String   @unique
+  id          String           @id @default(uuid())
+  name        String           @unique
   description String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  // Связи
-  users       UserRole[]
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
   permissions RolePermission[]
+  users       UserRole[]
 }
 
 model Permission {
-  id          String   @id @default(uuid())
-  name        String   @unique
+  id          String           @id @default(uuid())
+  name        String           @unique
   description String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  // Связи
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
   roles       RolePermission[]
 }
 
@@ -68,143 +55,124 @@ model UserRole {
   id        String   @id @default(uuid())
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-
-  // Связи
-  user      User     @relation(fields: [userId], references: [id])
   userId    String
-  role      Role     @relation(fields: [roleId], references: [id])
   roleId    String
+  role      Role     @relation(fields: [roleId], references: [id])
+  user      User     @relation(fields: [userId], references: [id])
 
   @@unique([userId, roleId])
 }
 
 model RolePermission {
-  id        String   @id @default(uuid())
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // Связи
-  role      Role     @relation(fields: [roleId], references: [id])
-  roleId    String
-  permission Permission @relation(fields: [permissionId], references: [id])
+  id           String     @id @default(uuid())
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  roleId       String
   permissionId String
+  permission   Permission @relation(fields: [permissionId], references: [id])
+  role         Role       @relation(fields: [roleId], references: [id])
 
   @@unique([roleId, permissionId])
 }
 
-enum GameRole {
-  GAME_MASTER // Ведущий
-  CONTESTANT  // Изменено: Участник игры (вместо PLAYER)
-}
-
 model Game {
-  id            String        @id @default(uuid())
-  title         String
-  isActive      Boolean       @default(false)
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
-  
-  // Связи
-  creator       User          @relation("GameCreator", fields: [creatorId], references: [id])
-  creatorId     String
-  categories    Category[]
-  questionRows  QuestionRow[]
-  gameSessions  GameSession[] // Связь с сессиями (может быть несколько сессий одной игры)
+  id           String        @id @default(uuid())
+  title        String
+  isActive     Boolean       @default(false)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  creatorId    String
+  categories   Category[]
+  creator      User          @relation("GameCreator", fields: [creatorId], references: [id])
+  gameSessions GameSession[]
+  questionRows QuestionRow[]
 }
 
 model Player {
-  id          String   @id @default(uuid())
-  name        String   // Отображаемое в игре имя (может отличаться от имени пользователя)
-  points      Int      @default(0)
-  role        GameRole @default(CONTESTANT)
-  status      String   @default("offline") // Для отслеживания состояния подключения
-  socketId    String?  // Для хранения ID текущего сокет-соединения
-  
-  // Связи
-  gameSession GameSession @relation(fields: [gameSessionId], references: [id])
-  gameSessionId String
-  user        User?     @relation(fields: [userId], references: [id])
-  userId      String?
-  
-  // Вопросы, на которые ответил этот игрок
+  id                String                @id @default(uuid())
+  name              String
+  points            Int                   @default(0)
+  role              GameRole              @default(CONTESTANT)
+  gameSessionId     String
+  userId            String?
+  socketId          String?
+  status            String                @default("offline")
   answeredQuestions GameSessionQuestion[]
+  gameSession       GameSession           @relation(fields: [gameSessionId], references: [id])
+  user              User?                 @relation(fields: [userId], references: [id])
 }
 
 model GameSession {
-  id            String               @id @default(uuid())
-  startedAt     DateTime             @default(now())
-  endedAt       DateTime?
-  currentTurn   String?              // ID игрока, чей сейчас ход
-  numberOfPlayers Int                @default(3) @db.SmallInt // Максимальное количество игроков (до 10)
-  numberOfAiPlayers Int              @default(0) @db.SmallInt // Количество ИИ игроков (не более, чем numberOfPlayers)
-  
-  // Связи
-  game          Game                 @relation(fields: [gameId], references: [id])
-  gameId        String               // Убрано @unique, т.к. у игры может быть несколько сессий
-  players       Player[]             // Игроки, участвующие в этой сессии
-  
-  // Состояние вопросов в этой сессии
-  questions     GameSessionQuestion[]
+  id                String                @id @default(uuid())
+  startedAt         DateTime              @default(now())
+  endedAt           DateTime?
+  currentTurn       String?
+  gameId            String
+  numberOfAiPlayers Int                   @default(0) @db.SmallInt
+  numberOfPlayers   Int                   @default(3) @db.SmallInt
+  defaultTimer      Int                   @default(30) @db.SmallInt
+  name              String
+  game              Game                  @relation(fields: [gameId], references: [id])
+  questions         GameSessionQuestion[]
+  players           Player[]
+
+  // Виртуальное поле для роли пользователя (не хранится в БД)
+  /// @zod.custom.omit([])
+  /// @zod.custom.transform(z.string().default('player'))
+  userRole          String?              @default("player") @map("_userRole") @ignore
 }
 
 model GameSessionQuestion {
-  id            String      @id @default(uuid())
-  name          String      // Добавленное обязательное поле
-  timer         Int         @default(5) @db.SmallInt // Таймер от 0 до 120 секунд
-  isRevealed    Boolean     @default(false) // Был ли вопрос открыт
-  isAnswered    Boolean     @default(false) // Был ли дан ответ
-  
-  // Связи
-  gameSession   GameSession @relation(fields: [gameSessionId], references: [id])
-  gameSessionId String
-  question      Question    @relation(fields: [questionId], references: [id])
-  questionId    String
-  
-  // Кто ответил на вопрос в этой сессии
-  answeredBy       Player?  @relation(fields: [answeredByPlayerId], references: [id])
+  id                 String      @id @default(uuid())
+  isRevealed         Boolean     @default(false)
+  isAnswered         Boolean     @default(false)
+  gameSessionId      String
+  questionId         String
   answeredByPlayerId String?
-  
+  answeredBy         Player?     @relation(fields: [answeredByPlayerId], references: [id])
+  gameSession        GameSession @relation(fields: [gameSessionId], references: [id])
+  question           Question    @relation(fields: [questionId], references: [id])
+
   @@unique([gameSessionId, questionId])
 }
 
 model Category {
-  id        String    @id @default(uuid())
+  id        String     @id @default(uuid())
   name      String
-  order     Int       // Позиция категории для отображения
-  
-  // Связи
-  game      Game      @relation(fields: [gameId], references: [id])
+  order     Int
   gameId    String
+  game      Game       @relation(fields: [gameId], references: [id])
   questions Question[]
 }
 
 model QuestionRow {
-  id        String    @id @default(uuid())
-  value     Int       // Стоимость вопросов в этом ряду (100, 200, 300...)
-  order     Int       // Порядок отображения ряда
-  
-  // Связи
-  game      Game      @relation(fields: [gameId], references: [id])
+  id        String     @id @default(uuid())
+  value     Int
+  order     Int
   gameId    String
   questions Question[]
+  game      Game       @relation(fields: [gameId], references: [id])
 }
 
 model Question {
-  id         String    @id @default(uuid())
-  question   String
-  answer     String
-  
-  // Связи
-  category     Category   @relation(fields: [categoryId], references: [id])
-  categoryId   String
-  
-  // Связь с рядом вопросов
-  questionRow  QuestionRow @relation(fields: [rowId], references: [id])
-  rowId        String
-  
-  // Связь с сессией игры
+  id                  String                @id @default(uuid())
+  question            String
+  answer              String
+  categoryId          String
+  rowId               String
   gameSessionQuestion GameSessionQuestion[]
-  
-  // Уникальное ограничение - один вопрос на пересечении категории и ряда
+  category            Category              @relation(fields: [categoryId], references: [id])
+  questionRow         QuestionRow           @relation(fields: [rowId], references: [id])
+
   @@unique([categoryId, rowId])
+}
+
+enum SystemRole {
+  ADMIN
+  USER
+}
+
+enum GameRole {
+  GAME_MASTER
+  CONTESTANT
 }

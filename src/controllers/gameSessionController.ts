@@ -1,17 +1,48 @@
 import { Request, Response, NextFunction } from 'express';
-import { Player, Game, SystemRole } from '@prisma/client';
+import { Player, Game, SystemRole, GameRole } from '@prisma/client';
 import { prisma } from '../prisma';
+import { GameSessionWithUserRole, UserSessionRole } from '../types/session';
 
 // Создать новую игровую сессию
 export const createGameSession = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const { gameId } = req.body;
+    const { gameId, name, numberOfPlayers, numberOfAiPlayers, defaultTimer } = req.body;
+    
+    // Валидация параметров
+    if (!gameId || !name) {
+      res.status(400).json({ message: 'Необходимы параметры gameId и name' });
+      return;
+    }
+    
+    // Проверка диапазонов числовых значений
+    const playerCount = numberOfPlayers ? parseInt(numberOfPlayers) : 3;
+    if (playerCount < 2 || playerCount > 10) {
+      res.status(400).json({ message: 'Количество игроков должно быть от 2 до 10' });
+      return;
+    }
+    
+    const aiPlayerCount = numberOfAiPlayers ? parseInt(numberOfAiPlayers) : 0;
+    if (aiPlayerCount < 0 || aiPlayerCount > playerCount) {
+      res.status(400).json({ message: 'Количество ИИ игроков должно быть от 0 до значения numberOfPlayers' });
+      return;
+    }
+    
+    const timer = defaultTimer ? parseInt(defaultTimer) : 30;
+    if (timer < 5 || timer > 120) {
+      res.status(400).json({ message: 'Таймер должен быть от 5 до 120 секунд' });
+      return;
+    }
+    
     const session = await prisma.gameSession.create({
       data: {
+        name,
         game: {
           connect: { id: gameId }
         },
-        startedAt: new Date()
+        startedAt: new Date(),
+        numberOfPlayers: playerCount,
+        numberOfAiPlayers: aiPlayerCount,
+        defaultTimer: timer
       },
       include: {
         game: true,
@@ -21,6 +52,25 @@ export const createGameSession = async (req: Request, res: Response, next: NextF
     res.status(201).json(session);
   } catch (error) {
     next(error);
+  }
+};
+
+// Определение роли пользователя в сессии
+const determineUserRole = (session: any, userId: string): UserSessionRole => {
+  // Проверяем, является ли пользователь создателем игры
+  const isCreator = session.game.creator?.id === userId;
+  
+  // Проверяем, является ли пользователь ведущим (game master) в этой сессии
+  const isGameMaster = session.players.some((player: Player) => 
+    player.userId === userId && player.role === GameRole.GAME_MASTER
+  );
+  
+  if (isCreator) {
+    return 'host';
+  } else if (isGameMaster) {
+    return 'gamemaster';
+  } else {
+    return 'player';
   }
 };
 
@@ -35,16 +85,40 @@ export const getAllGameSessions = async (req: Request, res: Response, next: Next
       return;
     }
 
+    // Для отладки
+    console.log(`Getting sessions for user ${userId}, isAdmin: ${isAdmin}`);
+
     const gameSessions = await prisma.gameSession.findMany({
-      where: isAdmin ? undefined : {
-        players: {
-          some: {
-            userId
-          }
-        }
-      },
+      where: isAdmin 
+        ? undefined 
+        : {
+            OR: [
+              // Сессии, где пользователь является участником
+              {
+                players: {
+                  some: {
+                    userId
+                  }
+                }
+              },
+              // Сессии игр, созданных пользователем
+              {
+                game: {
+                  creatorId: userId
+                }
+              }
+            ]
+          },
       include: {
-        game: true,
+        game: {
+          include: {
+            creator: {
+              select: {
+                id: true
+              }
+            }
+          }
+        },
         players: {
           include: {
             user: {
@@ -58,8 +132,22 @@ export const getAllGameSessions = async (req: Request, res: Response, next: Next
       }
     });
 
-    res.json(gameSessions);
+    // Определяем роль пользователя для каждой сессии
+    const sessionsWithRole = gameSessions.map(session => {
+      const userRole = determineUserRole(session, userId);
+      
+      return {
+        ...session,
+        userRole
+      } as GameSessionWithUserRole;
+    });
+
+    // Для отладки
+    console.log(`Found ${sessionsWithRole.length} game sessions`);
+
+    res.json(sessionsWithRole);
   } catch (error) {
+    console.error('Error in getAllGameSessions:', error);
     next(error);
   }
 };
@@ -68,11 +156,23 @@ export const getAllGameSessions = async (req: Request, res: Response, next: Next
 export const getGameSessionById = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { id } = req.params;
+    const userId = req.user?.id;
+    
+    if (!userId) {
+      res.status(401).json({ message: 'Not authenticated' });
+      return;
+    }
+
     const session = await prisma.gameSession.findUnique({
       where: { id },
       include: {
         game: {
           include: {
+            creator: {
+              select: {
+                id: true
+              }
+            },
             categories: {
               include: {
                 questions: true
@@ -96,7 +196,15 @@ export const getGameSessionById = async (req: Request, res: Response, next: Next
       return;
     }
 
-    res.json(session);
+    // Определяем роль пользователя в сессии
+    const userRole = determineUserRole(session, userId);
+
+    const sessionWithRole = {
+      ...session,
+      userRole
+    } as GameSessionWithUserRole;
+
+    res.json(sessionWithRole);
   } catch (error) {
     next(error);
   }
@@ -106,10 +214,26 @@ export const getGameSessionById = async (req: Request, res: Response, next: Next
 export const getGameSession = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { gameId } = req.params;
+    const userId = req.user?.id;
+    
+    if (!userId) {
+      res.status(401).json({ message: 'Not authenticated' });
+      return;
+    }
 
     const session = await prisma.gameSession.findFirst({
       where: { gameId },
       include: {
+        game: {
+          include: {
+            creator: {
+              select: {
+                id: true
+              }
+            }
+          }
+        },
+        players: true,
         questions: {
           include: {
             question: {
@@ -128,7 +252,15 @@ export const getGameSession = async (req: Request, res: Response, next: NextFunc
       return;
     }
 
-    res.json(session);
+    // Определяем роль пользователя в сессии
+    const userRole = determineUserRole(session, userId);
+
+    const sessionWithRole = {
+      ...session,
+      userRole
+    } as GameSessionWithUserRole;
+
+    res.json(sessionWithRole);
   } catch (error) {
     next(error);
   }
@@ -260,7 +392,7 @@ export const endGameSession = async (req: Request, res: Response, next: NextFunc
     const winner = gameSession.players.reduce((prev, current) => 
       (prev.points > current.points) ? prev : current, gameSession.players[0]);
     
-    if (winner) {
+    if (winner && winner.userId) {
       // Обновляем профиль победителя
       await prisma.userProfile.update({
         where: { userId: winner.userId },
@@ -272,7 +404,7 @@ export const endGameSession = async (req: Request, res: Response, next: NextFunc
       
       // Обновляем профили остальных игроков
       for (const player of gameSession.players) {
-        if (player.id !== winner.id) {
+        if (player.id !== winner.id && player.userId) {
           await prisma.userProfile.update({
             where: { userId: player.userId },
             data: {

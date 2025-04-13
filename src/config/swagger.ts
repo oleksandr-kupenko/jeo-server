@@ -154,6 +154,8 @@ const swaggerOptions = {
           type: 'object',
           properties: {
             id: { type: 'string', format: 'uuid' },
+            name: { type: 'string' },
+            timer: { type: 'integer', minimum: 0, maximum: 120 },
             isRevealed: { type: 'boolean' },
             isAnswered: { type: 'boolean' },
             gameSessionId: { type: 'string', format: 'uuid' },
