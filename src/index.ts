@@ -12,6 +12,7 @@ import categoryRoutes from './routes/category.routes';
 import questionRoutes from './routes/question.routes';
 import playerRoutes from './routes/player.routes';
 import gameSessionRoutes from './routes/gameSession.routes';
+import aiGameRoutes from './routes/aiGame.routes';
 import specs from './config/swagger';
 import { authenticate } from './middleware/auth';
 
@@ -44,6 +45,7 @@ app.use('/api/categories', authenticate, categoryRoutes);
 app.use('/api/questions', authenticate, questionRoutes);
 app.use('/api/players', authenticate, playerRoutes);
 app.use('/api/game-sessions', authenticate, gameSessionRoutes);
+app.use('/api/ai-games', authenticate, aiGameRoutes);
 
 const server = app.listen(port, () => {
     console.log(`⚡️[сервер]: Сервер запущен на http://localhost:${port}`);
