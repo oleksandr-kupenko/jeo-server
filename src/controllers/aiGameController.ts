@@ -2,23 +2,23 @@ import { Request, Response, NextFunction } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import { prisma } from '../prisma';
 import { emptyGameTemplate } from '../data-templates/empty-game.template';
-import { AutomaticallyGeneratedGameForm } from '../types/ai-game';
+import { 
+  AutomaticallyGeneratedGameForm, 
+  GameGenerationStatus, 
+  GenerationTask, 
+  GenerationResponse, 
+  ValidationResult 
+} from '../types/ai-game';
 import geminiService from '../services/geminiService';
 
 // Импортируем шаблон промпта
 const { jeopardy } = require('../config/prompt');
 
 // Хранилище задач генерации (в реальном приложении лучше использовать базу данных)
-const generationTasks: Record<string, {
-  status: 'pending' | 'completed' | 'failed',
-  data?: any,
-  error?: string,
-  userId: string,
-  formData: AutomaticallyGeneratedGameForm
-}> = {};
+const generationTasks: Record<string, GenerationTask> = {};
 
 // Валидация данных формы
-const validateAiGameForm = (formData: AutomaticallyGeneratedGameForm): { isValid: boolean, errors: string[] } => {
+const validateAiGameForm = (formData: AutomaticallyGeneratedGameForm): ValidationResult => {
   const errors: string[] = [];
   
   // Проверка обязательных полей (минимум одно из двух)
@@ -118,7 +118,7 @@ export const getGameGenerationStatus = async (
     // Возвращаем статус и данные (если есть)
     const task = generationTasks[id];
     
-    const response: any = {
+    const response: GenerationResponse = {
       success: true,
       status: task.status,
       id
@@ -172,13 +172,38 @@ async function generateGameContent(generationId: string, formData: Automatically
     );
     
     // Парсим ответ как JSON (удаляем возможное объявление переменной)
-    const cleanedJson = generatedContent
+    let cleanedJson = generatedContent
       .replace(/^const\s+\w+\s*=\s*/, '')  // Удаляем объявление переменной
+      .replace(/^var\s+\w+\s*=\s*/, '')    // Также удаляем var объявления
       .replace(/^\s*```(javascript|json)\s*/, '') // Удаляем маркер начала кода
       .replace(/\s*```\s*$/, ''); // Удаляем маркер конца кода
     
+    // Дополнительная очистка в случае, если объявление переменной находится в середине текста
+    if (cleanedJson.includes('const ') || cleanedJson.includes('var ')) {
+      // Извлекаем только JSON-часть
+      const jsonMatch = cleanedJson.match(/({[\s\S]*})/);
+      if (jsonMatch) {
+        cleanedJson = jsonMatch[0];
+      }
+    }
+    
+    console.log('Очищенный JSON перед парсингом:', cleanedJson);
+    
     // Преобразуем строку JSON в объект JavaScript
-    const gameData = JSON.parse(cleanedJson);
+    let gameData;
+    try {
+      gameData = JSON.parse(cleanedJson);
+    } catch (error) {
+      const parseError = error as Error;
+      console.error('Ошибка парсинга JSON:', parseError);
+      console.error('Исходный ответ от Gemini:', generatedContent);
+      throw new Error(`Не удалось преобразовать ответ Gemini в JSON: ${parseError.message}`);
+    }
+    
+    // Проверка структуры данных
+    if (!gameData || !Array.isArray(gameData.categories)) {
+      throw new Error('Неверный формат данных, полученных от Gemini: отсутствуют категории');
+    }
     
     // Обновляем статус задачи
     generationTasks[generationId].status = 'completed';
