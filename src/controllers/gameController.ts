@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { SystemRole } from '@prisma/client';
-import { prisma } from '../prisma';
 import { emptyGameTemplate } from '../data-templates/empty-game.template';
+import {prisma} from "../config/prisma";
 
 // Создание новой игры
 export const createGame = async (

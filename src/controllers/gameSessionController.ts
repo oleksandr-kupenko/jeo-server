@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { Player, Game, SystemRole, GameRole } from '@prisma/client';
-import { prisma } from '../prisma';
 import { GameSessionWithUserRole, UserSessionRole } from '../types/session';
+import {prisma} from "../config/prisma";
 
 // Создать новую игровую сессию
 export const createGameSession = async (req: Request, res: Response, next: NextFunction): Promise<void> => {

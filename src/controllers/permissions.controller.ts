@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { prisma } from '../prisma';
+import { prisma } from '../config/prisma';
 
 // Создание нового разрешения
 export const createPermission = async (req: Request, res: Response, next: NextFunction): Promise<void> => {

@@ -1,6 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
 import { v4 as uuidv4 } from 'uuid';
-import { prisma } from '../prisma';
 import { emptyGameTemplate } from '../data-templates/empty-game.template';
 import { 
   AutomaticallyGeneratedGameForm, 
@@ -10,6 +9,7 @@ import {
   ValidationResult 
 } from '../types/ai-game';
 import geminiService from '../services/geminiService';
+import {prisma} from "../config/prisma";
 
 // Импортируем шаблон промпта
 const { jeopardy } = require('../config/prompt');

@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { PrismaClient } from '@prisma/client';
-import { prisma } from '../prisma';
+import {prisma} from "../config/prisma";
 
 const prismaClient = new PrismaClient();
 

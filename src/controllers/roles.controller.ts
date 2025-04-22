@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { PrismaClient } from '@prisma/client';
-import { prisma } from '../prisma';
+import prisma from "../config/prisma";
 
 // Создание новой роли
 export const createRole = async (req: Request, res: Response, next: NextFunction): Promise<void> => {

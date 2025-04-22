@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { SystemRole, GameRole } from '@prisma/client';
-import { prisma } from '../prisma';
+import {prisma} from "../config/prisma";
 
 // Создание нового игрока
 export const createPlayer = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
